@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>버스 안내 전광판 (위치표시 추가)</title>
+  <style>
+    @font-face {
+      font-family: 'HY견고딕';
+      src: url('HY견고딕.ttf') format('truetype');
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      background-color: white;
+      height: 100vh;
+    }
+    .square {
+      position: relative;
+      width: 1280px;
+      height: 320px;
+      background-color: rgb(33, 33, 33);
+      border: 20px solid rgb(20, 20, 20);
+      overflow: hidden;
+    }
+    .grid-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(128, 1fr);
+      grid-template-rows: repeat(32, 1fr);
+      z-index: 2;
+      pointer-events: none;
+    }
+    .cell { border: 0.5px solid rgb(60, 60, 60); aspect-ratio: 1 / 1; }
+    .title {
+      position: absolute;
+      top: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: yellow;
+      font-size: 120px;
+      font-family: 'HY견고딕';
+      z-index: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .title span { margin: 0 100px; }
+    .scroll-text {
+      position: absolute;
+      bottom: 20px;
+      white-space: nowrap;
+      font-size: 120px;
+      font-family: 'HY견고딕';
+      z-index: 1;
+      display: none;
+      transform: translateX(0);
+    }
+    .yellow { color: yellow; }
+    .red { color: red; }
+    .green { color: lime; }
+    .third-top, .third-bottom, .fourth-top, .fourth-bottom {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 100px;
+      font-family: 'HY견고딕';
+      z-index: 1;
+      display: none;
+      white-space: nowrap;
+    }
+    .third-top { top: 20px; }
+    .third-bottom { bottom: 20px; }
+    .fourth-top { top: 20px; }
+    .fourth-bottom { bottom: 20px; }
+
+    .location-display {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      color: yellow;
+      font-size: 20px;
+      font-family: monospace;
+      z-index: 3;
+      background: rgba(0,0,0,0.5);
+      padding: 3px 8px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="square">
+    <div class="title" id="title"><span>알</span><span>림</span></div>
+
+    <div class="scroll-text" id="scroll-text-1">
+      <span class="yellow">버스가 주행중에는 자리에서 </span><span class="red">이동을 삼가하시고</span>
+      <span class="green">내리실분은 앉은자리에서 </span><span class="red">벨을</span>
+      <span class="yellow">미리 눌러주시고 </span><span class="red">버스가 완전히 정차한후</span>
+      <span class="green">하차 해주시기 바랍니다.</span>
+    </div>
+    <div class="scroll-text" id="scroll-text-2">
+      <span class="red">*무제한 서울 대중교통 이용*</span><span class="green">모바일티머니 </span><span class="yellow">기후동행카드</span>
+    </div>
+    <div class="scroll-text" id="scroll-text-3">
+      <span class="yellow">차내 </span><span class="red">통화를 </span><span class="yellow">하실때는 </span><span class="red">귓속말로</span>
+      <span class="green"> 해주시고 </span><span class="yellow">옆 사람에게 </span><span class="red">방해가 </span><span class="green">되지 않도록 </span><span class="yellow">해주시기 </span><span class="red">바랍니다.</span>
+    </div>
+    <div class="scroll-text" id="scroll-text-4">
+      <span class="yellow">이 차량은 </span><span class="green">공기청정기</span><span class="yellow">를 가동하여 </span><span class="red">바이러스,세균 </span><span class="yellow">의 2차 감염을 </span><span class="green">예방 </span><span class="yellow">하고 있습니다.</span>
+    </div>
+
+    <div class="third-top" id="third-top">
+      <span class="yellow">목동운수 </span><span class="green">양천</span><span class="red">01</span>
+    </div>
+    <div class="third-bottom" id="third-bottom">
+      <span class="green">첫차 </span><span class="red">05:30 </span><span class="green">막차 </span><span class="red">23:40</span>
+    </div>
+
+    <div class="fourth-top" id="fourth-top"></div>
+    <div class="fourth-bottom" id="fourth-bottom"></div>
+
+    <div class="grid-overlay" id="grid-overlay"></div>
+
+    <div class="location-display" id="locationDisplay">위치: 불명</div>
+  </div>
+
+  <audio id="announcement" src="announcement.mp3"></audio>
+
+  <script>
+    const scrollTexts = [
+      { id: 'scroll-text-1', duration: 24370 },
+      { id: 'scroll-text-2', duration: 10000 },
+      { id: 'scroll-text-3', duration: 17000 },
+      { id: 'scroll-text-4', duration: 15000 }
+    ];
+    const title = document.getElementById('title');
+    const thirdTop = document.getElementById('third-top');
+    const thirdBottom = document.getElementById('third-bottom');
+    const fourthTop = document.getElementById('fourth-top');
+    const fourthBottom = document.getElementById('fourth-bottom');
+    const locationDisplay = document.getElementById('locationDisplay');
+
+    const lcdTop = document.createElement('div');
+    lcdTop.style.position = 'absolute';
+    lcdTop.style.top = '20px';
+    lcdTop.style.left = '50%';
+    lcdTop.style.transform = 'translateX(-50%)';
+    lcdTop.style.fontSize = '100px';
+    lcdTop.style.fontFamily = 'HY견고딕';
+    lcdTop.style.color = 'yellow';
+    lcdTop.style.zIndex = '1';
+    lcdTop.style.whiteSpace = 'nowrap';
+    lcdTop.style.display = 'none';
+    lcdTop.textContent = '이번 정류소';
+    document.querySelector('.square').appendChild(lcdTop);
+
+    const lcdBottom = document.createElement('div');
+    lcdBottom.style.position = 'absolute';
+    lcdBottom.style.bottom = '20px';
+    lcdBottom.style.left = '50%';
+    lcdBottom.style.transform = 'translateX(-50%)';
+    lcdBottom.style.fontSize = '100px';
+    lcdBottom.style.fontFamily = 'HY견고딕';
+    lcdBottom.style.color = 'lime';
+    lcdBottom.style.zIndex = '1';
+    lcdBottom.style.whiteSpace = 'nowrap';
+    lcdBottom.style.display = 'none';
+    lcdBottom.textContent = '○○정류장';
+    document.querySelector('.square').appendChild(lcdBottom);
+
+    const audio = document.getElementById('announcement');
+
+    const containerWidth = 1280;
+    const speed = 330;
+    let lastIndex = 0;
+    let lastPos = null;
+    let currentSpeed = 0;
+    let inTarget = false;
+
+    function randomNext() {
+      if (inTarget) return;
+      let next;
+      do { next = Math.floor(Math.random() * 6) + 1; } while (next === lastIndex);
+      lastIndex = next;
+      showMessage(next);
+    }
+
+    function showMessage(index) {
+      scrollTexts.forEach(item => document.getElementById(item.id).style.display = 'none');
+      thirdTop.style.display = 'none';
+      thirdBottom.style.display = 'none';
+      fourthTop.style.display = 'none';
+      fourthBottom.style.display = 'none';
+      lcdTop.style.display = 'none';
+      lcdBottom.style.display = 'none';
+      title.style.display = (index === 5 || index === 6) ? 'none' : 'flex';
+
+      if (index >= 1 && index <= 4) {
+        const elem = document.getElementById(`scroll-text-${index}`);
+        elem.style.display = 'block';
+        const width = elem.scrollWidth;
+        const totalDistance = width + containerWidth;
+        const duration = totalDistance / speed;
+        elem.style.transform = `translateX(0)`;
+        elem.style.transition = 'none';
+        setTimeout(() => {
+          elem.style.transition = `transform ${duration}s linear`;
+          elem.style.transform = `translateX(-${totalDistance}px)`;
+        }, 500);
+        setTimeout(randomNext, scrollTexts[index - 1].duration);
+      }
+      else if (index === 5) {
+        thirdTop.style.display = 'block';
+        thirdBottom.style.display = 'block';
+        setTimeout(randomNext, 6000);
+      }
+      else if (index === 6) {
+        const now = new Date();
+        const hour = String(now.getHours() % 12 || 12).padStart(2, '0');
+        const minute = String(now.getMinutes()).padStart(2, '0');
+        fourthTop.innerHTML = `<span class="red">현재시각: </span><span class="yellow">${hour}:${minute}</span>`;
+        fourthBottom.innerHTML = `<span class="green">현재속도: </span><span class="red">${currentSpeed.toFixed(1)}km</span>`;
+        fourthTop.style.display = 'block';
+        fourthBottom.style.display = 'block';
+        setTimeout(randomNext, 5000);
+      }
+    }
+
+    navigator.geolocation.watchPosition(pos => {
+      const now = Date.now();
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      locationDisplay.textContent = `위치: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+
+      const targetLat = 36.0886183;
+      const targetLon = 129.3823379;
+      const R = 6371e3;
+      const φ1 = lat * Math.PI / 180;
+      const φ2 = targetLat * Math.PI / 180;
+      const Δφ = (targetLat - lat) * Math.PI / 180;
+      const Δλ = (targetLon - lon) * Math.PI / 180;
+      const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const dist = R * c;
+
+      if (lastPos) {
+        const dLat = (lat - lastPos.lat) * Math.PI / 180;
+        const dLon = (lon - lastPos.lon) * Math.PI / 180;
+        const a2 = Math.sin(dLat/2)**2 + Math.cos(lastPos.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLon/2)**2;
+        const c2 = 2 * Math.atan2(Math.sqrt(a2), Math.sqrt(1 - a2));
+        const d = R * c2;
+        const dt = (now - lastPos.time) / 1000;
+        if (dt > 0) currentSpeed = d / dt * 3.6;
+      }
+      lastPos = { lat, lon, time: now };
+
+      if (dist <= 10 && !inTarget) {
+        inTarget = true;
+        clearAll();
+        lcdTop.style.display = 'block';
+        lcdBottom.style.display = 'block';
+        audio.play();
+      } else if (dist > 10 && inTarget) {
+        inTarget = false;
+        lcdTop.style.display = 'none';
+        lcdBottom.style.display = 'none';
+        randomNext();
+      }
+    }, err => console.warn('GPS error:', err), { enableHighAccuracy: true });
+
+    function clearAll() {
+      scrollTexts.forEach(item => document.getElementById(item.id).style.display = 'none');
+      thirdTop.style.display = 'none';
+      thirdBottom.style.display = 'none';
+      fourthTop.style.display = 'none';
+      fourthBottom.style.display = 'none';
+      title.style.display = 'none';
+    }
+
+    randomNext();
+
+    const gridOverlay = document.getElementById('grid-overlay');
+    for (let i = 0; i < 128 * 32; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      gridOverlay.appendChild(cell);
+    }
+  </script>
+</body>
+</html>
